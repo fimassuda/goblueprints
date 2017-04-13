@@ -1,7 +1,9 @@
 package main
 
 import (
+	"crypto/md5"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -15,7 +17,7 @@ type authHandler struct {
 }
 
 func (h *authHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if _, err := r.Cookie("auth"); err == http.ErrNoCookie {
+	if cookie, err := r.Cookie("auth"); err == http.ErrNoCookie || cookie.Value == "" {
 		// not authenticated
 		w.Header().Set("Location", "/login")
 		w.WriteHeader(http.StatusTemporaryRedirect)
@@ -74,10 +76,17 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 				log.Fatalln("Error when trying to get user from", provider, "-", err)
 			}
 
-			log.Println("Set auth cookie")
+			m := md5.New()
+			io.WriteString(m, strings.ToLower(user.Email()))
+			userId := fmt.Sprintf("%x", m.Sum(nil))
+			// save some data
 			authCookieValue := objx.New(map[string]interface{}{
-				"name": user.Name(),
+				"userid":     userId,
+				"name":       user.Name(),
+				"avatar_url": user.AvatarURL(),
+				"email":      user.Email(),
 			}).MustBase64()
+
 			http.SetCookie(w, &http.Cookie{
 				Name:  "auth",
 				Value: authCookieValue,
